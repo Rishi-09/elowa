@@ -25,9 +25,17 @@ export function createApp() {
   app.use(cors({ origin: env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN.split(',') }));
   app.use(express.json({ limit: '1mb' }));
   app.use(pinoHttp({ logger }));
-  app.use(generalLimiter);
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true, data: { status: 'ok' } }));
+  /* Health checks sit ahead of the rate limiter: a platform probe runs every
+     few seconds, and letting it spend the shared per-IP budget risks a 429
+     being read as the service being down. `/health` is the bare path platform
+     probes default to; `/api/health` keeps the documented one working. */
+  const health = (_req: express.Request, res: express.Response) =>
+    res.json({ ok: true, data: { status: 'ok' } });
+  app.get('/health', health);
+  app.get('/api/health', health);
+
+  app.use(generalLimiter);
 
   app.use('/api/auth', authRouter);
   app.use('/api/users', usersRouter);
