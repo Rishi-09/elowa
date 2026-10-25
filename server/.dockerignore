@@ -1,0 +1,12 @@
+node_modules
+dist
+var
+tests
+jest.config.js
+.env
+.env.*
+!.env.example
+*.log
+Dockerfile
+.dockerignore
+SECURITY_AUDIT.md
