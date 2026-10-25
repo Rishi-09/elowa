@@ -18,4 +18,7 @@ export const messagesApi = {
 
   react: (messageId: string, emoji: string) =>
     api.post<Message>(`/messages/${messageId}/reactions`, { emoji }),
+
+  /** Delete for me: hides the message from this user, including others'. */
+  hide: (messageId: string) => api.post<{ hidden: true }>(`/messages/${messageId}/hide`),
 };

@@ -5,6 +5,7 @@ import type { AckWith, SendPayload } from '@/services/socketEvents';
 import { clientMessageId } from '@/lib/ids';
 import { localCache } from '@/services/localCache';
 import { mediaService, type PickedAsset } from '@/features/media/mediaService';
+import { messagesApi } from '@/features/messages/messagesApi';
 
 type ConvState = {
   messages: Message[];
@@ -51,6 +52,10 @@ type MessageState = {
   retry: (conversationId: string, clientMessageId: string) => Promise<void>;
   edit: (conversationId: string, messageId: string, body: string) => Promise<void>;
   remove: (conversationId: string, messageId: string) => Promise<void>;
+  /** Delete for me — drops the message locally and on the server, for us only. */
+  hide: (conversationId: string, messageId: string) => Promise<void>;
+  /** Forgets every message held for a conversation, in memory and on disk. */
+  clearConversation: (conversationId: string) => Promise<void>;
   react: (conversationId: string, messageId: string, emoji: string, meId: string) => Promise<void>;
 
   /** Reload unsent messages from disk so a kill mid-send is not data loss. */
@@ -383,6 +388,42 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       if (prior) get().upsert(conversationId, prior);
       throw e;
     }
+  },
+
+  hide: async (conversationId, messageId) => {
+    const prior = get().byConv[conversationId]?.messages ?? [];
+    const target = prior.find((m) => m.id === messageId);
+    /* Optimistic: drop it from view, restore if the server refuses. */
+    set((state) => ({
+      byConv: {
+        ...state.byConv,
+        [conversationId]: {
+          ...(state.byConv[conversationId] ?? { messages: [], typingUserIds: new Set<string>() }),
+          messages: prior.filter((m) => m.id !== messageId),
+        },
+      },
+    }));
+    try {
+      await messagesApi.hide(messageId);
+      await localCache.deleteMessage(messageId).catch(() => {});
+    } catch (e) {
+      if (target) get().upsert(conversationId, target);
+      throw e;
+    }
+  },
+
+  clearConversation: async (conversationId) => {
+    set((state) => ({
+      byConv: {
+        ...state.byConv,
+        [conversationId]: {
+          ...(state.byConv[conversationId] ?? { typingUserIds: new Set<string>() }),
+          messages: [],
+          typingUserIds: state.byConv[conversationId]?.typingUserIds ?? new Set<string>(),
+        },
+      },
+    }));
+    await localCache.deleteConversationMessages(conversationId).catch(() => {});
   },
 
   react: async (conversationId, messageId, emoji, meId) => {

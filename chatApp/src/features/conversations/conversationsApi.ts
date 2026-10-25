@@ -27,4 +27,10 @@ export const conversationsApi = {
     api.patch<Conversation>(`/conversations/${id}/members/${userId}/admin`, { admin }),
 
   leaveGroup: (id: string) => api.post<{ left: true }>(`/conversations/${id}/leave`),
+
+  /** Empties this device's user's copy of the history; others keep theirs. */
+  clear: (id: string) => api.post<Conversation>(`/conversations/${id}/clear`),
+
+  /** Removes the chat for this user only. A new message brings it back. */
+  deleteForMe: (id: string) => api.del<{ deleted: true }>(`/conversations/${id}`),
 };

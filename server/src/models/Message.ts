@@ -43,6 +43,15 @@ const messageSchema = new Schema(
     },
     body: { type: String, default: null, maxlength: 8000 },
     media: { type: mediaSchema, default: null },
+    /**
+     * Users who deleted this message only for themselves. Filtered out of
+     * their reads while every other participant still sees it, which is what
+     * separates "delete for me" from the `deletedAt` tombstone.
+     */
+    hiddenFor: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+      default: [],
+    },
     replyToId: { type: Schema.Types.ObjectId, ref: 'Message', default: null },
     reactions: { type: [reactionSchema], default: [] },
     status: {

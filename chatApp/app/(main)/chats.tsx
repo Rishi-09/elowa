@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
@@ -18,6 +18,9 @@ import type { Conversation } from '@/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ElowaLogo } from '@/components/ui/ElowaLogo';
 import { AppDrawer } from '@/features/navigation/AppDrawer';
+import { ActionSheet, type SheetAction } from '@/components/ui/ActionSheet';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useMessageStore } from '@/stores/messageStore';
 
 function formatTime(iso?: string | null): string {
   if (!iso) return '';
@@ -54,6 +57,13 @@ export default function ChatsScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /* Row long-press target, and the destructive action awaiting confirmation. */
+  const [selected, setSelected] = useState<Conversation | null>(null);
+  const [pending, setPending] = useState<{ kind: 'delete' | 'clear'; conv: Conversation } | null>(
+    null,
+  );
+  const [actionError, setActionError] = useState<string | null>(null);
+  const clearConversation = useMessageStore((s) => s.clearConversation);
 
   const { data, isLoading, isRefetching, isError, refetch } = useQuery({
     queryKey: ['conversations'],
@@ -90,8 +100,11 @@ export default function ChatsScreen() {
       return (
         <Pressable
           onPress={() => router.push(`/(main)/chat/${item.id}`)}
+          onLongPress={() => setSelected(item)}
+          delayLongPress={350}
           accessibilityRole="button"
           accessibilityLabel={a11y}
+          accessibilityHint="Press and hold for chat options"
           style={({ pressed }) => [
             styles.row,
             { backgroundColor: pressed ? theme.colors.surface : 'transparent' },
@@ -131,6 +144,45 @@ export default function ChatsScreen() {
     },
     [router, theme],
   );
+
+  const rowActions = useMemo<SheetAction[]>(() => {
+    if (!selected) return [];
+    return [
+      {
+        key: 'clear',
+        label: 'Clear messages',
+        icon: 'delete',
+        onPress: () => setPending({ kind: 'clear', conv: selected }),
+      },
+      {
+        key: 'delete',
+        label: 'Delete chat',
+        icon: 'delete',
+        destructive: true,
+        onPress: () => setPending({ kind: 'delete', conv: selected }),
+      },
+    ];
+  }, [selected]);
+
+  /* Both actions affect only this account, so the list and the local message
+     cache are the only things to reconcile afterwards. */
+  const runPending = useCallback(async () => {
+    if (!pending) return;
+    const { kind, conv } = pending;
+    setPending(null);
+    try {
+      if (kind === 'clear') await conversationsApi.clear(conv.id);
+      else await conversationsApi.deleteForMe(conv.id);
+      await clearConversation(conv.id);
+      await qc.invalidateQueries({ queryKey: ['conversations'] });
+    } catch {
+      setActionError(
+        kind === 'clear'
+          ? 'Those messages could not be cleared.'
+          : 'That chat could not be deleted.',
+      );
+    }
+  }, [pending, clearConversation, qc]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
@@ -203,6 +255,43 @@ export default function ChatsScreen() {
       />
 
       <AppDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
+
+      <ActionSheet
+        visible={!!selected}
+        title={
+          selected
+            ? selected.type === 'group'
+              ? selected.title || 'Group'
+              : selected.peer.displayName
+            : undefined
+        }
+        actions={rowActions}
+        onClose={() => setSelected(null)}
+      />
+
+      <ConfirmDialog
+        visible={!!pending}
+        title={pending?.kind === 'clear' ? 'Clear messages?' : 'Delete chat?'}
+        message={
+          pending?.kind === 'clear'
+            ? 'The messages are removed for you only. Everyone else keeps their copy.'
+            : 'The chat is removed for you only. Everyone else keeps theirs, and a new message brings it back.'
+        }
+        confirmLabel={pending?.kind === 'clear' ? 'Clear' : 'Delete'}
+        destructive
+        onCancel={() => setPending(null)}
+        onConfirm={() => void runPending()}
+      />
+
+      <ConfirmDialog
+        visible={!!actionError}
+        title="Something went wrong"
+        message={actionError ?? undefined}
+        confirmLabel="OK"
+        cancelLabel="Dismiss"
+        onConfirm={() => setActionError(null)}
+        onCancel={() => setActionError(null)}
+      />
     </View>
   );
 }

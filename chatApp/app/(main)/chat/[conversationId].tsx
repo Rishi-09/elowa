@@ -62,6 +62,9 @@ export default function ChatScreen() {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Message | null>(null);
+  /* Delete for me is offered on every message, including the peer's, so it
+     needs its own confirmation target. */
+  const [confirmHide, setConfirmHide] = useState<Message | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [atBottom, setAtBottom] = useState(true);
@@ -82,6 +85,7 @@ export default function ChatScreen() {
   const retryMsg = useMessageStore((s) => s.retry);
   const editMsg = useMessageStore((s) => s.edit);
   const removeMsg = useMessageStore((s) => s.remove);
+  const hideMsg = useMessageStore((s) => s.hide);
   const reactMsg = useMessageStore((s) => s.react);
 
   const { data: convs } = useQuery({
@@ -324,10 +328,16 @@ export default function ChatScreen() {
         onPress: () => void retryMsg(conversationId, selected.clientMessageId!),
       });
     }
+    list.push({
+      key: 'hide',
+      label: 'Delete for me',
+      icon: 'delete',
+      onPress: () => setConfirmHide(selected),
+    });
     if (mine && !selected.deletedAt) {
       list.push({
         key: 'delete',
-        label: 'Delete',
+        label: 'Delete for everyone',
         icon: 'delete',
         destructive: true,
         onPress: () => setConfirmDelete(selected),
@@ -641,8 +651,26 @@ export default function ChatScreen() {
       />
 
       <ConfirmDialog
+        visible={!!confirmHide}
+        title="Delete for you?"
+        message="It stays visible to everyone else in this conversation."
+        confirmLabel="Delete"
+        destructive
+        onCancel={() => setConfirmHide(null)}
+        onConfirm={() => {
+          const target = confirmHide;
+          setConfirmHide(null);
+          if (target) {
+            void hideMsg(conversationId, target.id).catch(() =>
+              setActionError('That message could not be deleted.'),
+            );
+          }
+        }}
+      />
+
+      <ConfirmDialog
         visible={!!confirmDelete}
-        title="Delete message?"
+        title="Delete for everyone?"
         message="It will be removed for everyone in this conversation."
         confirmLabel="Delete"
         destructive

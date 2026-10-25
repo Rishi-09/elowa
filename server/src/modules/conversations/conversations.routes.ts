@@ -111,6 +111,22 @@ const addMembers: RequestHandler = async (req, res, next) => {
   }
 };
 
+const clearForMe: RequestHandler = async (req, res, next) => {
+  try {
+    ok(res, await conversationsService.clearForMe(me(req), req.params.id!));
+  } catch (e) {
+    next(e);
+  }
+};
+
+const deleteForMe: RequestHandler = async (req, res, next) => {
+  try {
+    ok(res, await conversationsService.deleteForMe(me(req), req.params.id!));
+  } catch (e) {
+    next(e);
+  }
+};
+
 const removeMember: RequestHandler = async (req, res, next) => {
   try {
     ok(res, await conversationsService.removeMember(me(req), req.params.id!, req.params.userId!));
@@ -150,6 +166,8 @@ conversationsRouter.post('/', validateBody(createBody), create);
 conversationsRouter.post('/group', validateBody(createGroupBody), createGroup);
 conversationsRouter.get('/:id', get);
 conversationsRouter.patch('/:id', validateBody(patchBody), patch);
+conversationsRouter.delete('/:id', deleteForMe);
+conversationsRouter.post('/:id/clear', clearForMe);
 conversationsRouter.post('/:id/members', validateBody(membersBody), addMembers);
 conversationsRouter.delete('/:id/members/:userId', removeMember);
 conversationsRouter.patch('/:id/members/:userId/admin', validateBody(adminBody), setAdmin);

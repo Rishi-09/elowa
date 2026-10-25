@@ -183,6 +183,15 @@ export const localCache = {
     return rows.map(fromRow);
   },
 
+  /**
+   * Drop every cached message in one conversation. Used by clear and delete
+   * chat, so the next cold start does not repaint what was just removed.
+   */
+  async deleteConversationMessages(conversationId: string): Promise<void> {
+    const db = await getDb();
+    await db.runAsync('DELETE FROM messages WHERE conversation_id = ?', [conversationId]);
+  },
+
   /** Drop one row — used when a local id is replaced by the server id. */
   async deleteMessage(id: string): Promise<void> {
     const db = await getDb();

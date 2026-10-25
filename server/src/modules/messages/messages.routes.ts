@@ -53,6 +53,16 @@ const send: RequestHandler = async (req, res, next) => {
   }
 };
 
+/** Delete for me: drops the message from this caller's view only. */
+const hide: RequestHandler = async (req, res, next) => {
+  try {
+    const me = new Types.ObjectId(req.userId);
+    ok(res, await messagesService.hideForMe(me, req.params.id!));
+  } catch (e) {
+    next(e);
+  }
+};
+
 const list: RequestHandler = async (req, res, next) => {
   try {
     const me = new Types.ObjectId(req.userId);
@@ -112,6 +122,7 @@ messagesRouter.use(requireAuth);
 messagesRouter.post('/', validateBody(sendBody), send);
 messagesRouter.patch('/:id', validateBody(editBody), edit);
 messagesRouter.delete('/:id', del);
+messagesRouter.post('/:id/hide', hide);
 messagesRouter.post('/:id/reactions', validateBody(reactBody), react);
 
 export const conversationMessagesRouter = Router({ mergeParams: true });

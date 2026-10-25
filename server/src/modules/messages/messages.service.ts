@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import { Conversation } from '../../models/Conversation';
+import { Conversation, clearedAtFor } from '../../models/Conversation';
 import { Message, publicMessage, type MessageDoc } from '../../models/Message';
 import { Errors } from '../../lib/errors';
 import { decodeCursor, encodeCursor } from '../../lib/pagination';
@@ -92,15 +92,28 @@ export const messagesService = {
   async list(userId: Types.ObjectId, conversationId: string, before: string | undefined, limit: number) {
     if (!Types.ObjectId.isValid(conversationId)) throw Errors.notFound();
     const convId = new Types.ObjectId(conversationId);
-    await assertMember(convId, userId);
+    const conv = await assertMember(convId, userId);
 
-    const q: Record<string, unknown> = { conversationId: convId };
+    /* Everything this user removed from their own view: messages they hid one
+       by one, and anything predating a clear or delete of the whole chat. */
+    const q: Record<string, unknown> = {
+      conversationId: convId,
+      hiddenFor: { $ne: userId },
+    };
+    const cleared = clearedAtFor(conv, userId);
+    if (cleared) q.createdAt = { $gt: cleared };
     if (before) {
       const cur = decodeCursor(before);
       if (cur) {
-        q.$or = [
-          { createdAt: { $lt: cur.createdAt } },
-          { createdAt: cur.createdAt, _id: { $lt: cur.id } },
+        /* $and, not $or at top level: the clear watermark above is a lower
+           bound and the cursor an upper one, and both must hold. */
+        q.$and = [
+          {
+            $or: [
+              { createdAt: { $lt: cur.createdAt } },
+              { createdAt: cur.createdAt, _id: { $lt: cur.id } },
+            ],
+          },
         ];
       }
     }
@@ -138,6 +151,20 @@ export const messagesService = {
     msg.media = null;
     await msg.save();
     return publicMessage(msg);
+  },
+
+  /**
+   * Remove a message from one user's view only. Unlike softDelete this leaves
+   * the message intact for everyone else, so it is allowed on messages the
+   * caller did not send.
+   */
+  async hideForMe(userId: Types.ObjectId, id: string) {
+    if (!Types.ObjectId.isValid(id)) throw Errors.notFound();
+    const msg = await Message.findById(id);
+    if (!msg) throw Errors.notFound('Message not found');
+    await assertMember(msg.conversationId, userId);
+    await Message.updateOne({ _id: msg._id }, { $addToSet: { hiddenFor: userId } });
+    return { hidden: true };
   },
 
   async markDelivered(messageId: string, deliveredAt: Date) {
@@ -249,12 +276,15 @@ export const messagesService = {
   async search(userId: Types.ObjectId, conversationId: string, query: string, limit: number) {
     if (!Types.ObjectId.isValid(conversationId)) throw Errors.notFound();
     const convId = new Types.ObjectId(conversationId);
-    await assertMember(convId, userId);
+    const conv = await assertMember(convId, userId);
 
+    const cleared = clearedAtFor(conv, userId);
     const docs = await Message.find({
       conversationId: convId,
       deletedAt: null,
       type: 'text',
+      hiddenFor: { $ne: userId },
+      ...(cleared ? { createdAt: { $gt: cleared } } : {}),
       $text: { $search: query },
     })
       .sort({ createdAt: -1 })

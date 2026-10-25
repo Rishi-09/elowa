@@ -2,7 +2,9 @@ import { Types } from 'mongoose';
 import {
   Conversation,
   MAX_GROUP_MEMBERS,
+  clearedAtFor,
   isAdmin,
+  isHiddenFrom,
   type ConversationDoc,
   type ConversationDocument,
 } from '../../models/Conversation';
@@ -26,23 +28,33 @@ export async function serialize(convId: Types.ObjectId, me: Types.ObjectId) {
   const conv = await Conversation.findById(convId);
   if (!conv) throw Errors.notFound('Conversation not found');
 
+  const cleared = clearedAtFor(conv, me);
   const lastMessage = conv.lastMessageId
     ? await Message.findById(conv.lastMessageId)
-        .select({ type: 1, body: 1, createdAt: 1, senderId: 1, deletedAt: 1 })
+        .select({ type: 1, body: 1, createdAt: 1, senderId: 1, deletedAt: 1, hiddenFor: 1 })
         .lean()
     : null;
+
+  /* The preview has to respect this user's own clear/hide, otherwise a chat
+     they emptied still advertises its last line in the list. */
+  const lastVisible =
+    lastMessage &&
+    !(cleared && (lastMessage as unknown as { createdAt: Date }).createdAt <= cleared) &&
+    !(lastMessage.hiddenFor ?? []).some((u: Types.ObjectId) => u.equals(me))
+      ? lastMessage
+      : null;
 
   const base = {
     id: String(conv._id),
     type: conv.type,
     participantIds: conv.participantIds.map(String),
-    lastMessage: lastMessage
+    lastMessage: lastVisible
       ? {
-          id: String(lastMessage._id),
-          type: lastMessage.type,
-          body: lastMessage.deletedAt ? null : lastMessage.body,
-          senderId: String(lastMessage.senderId),
-          createdAt: (lastMessage as unknown as { createdAt: Date }).createdAt,
+          id: String(lastVisible._id),
+          type: lastVisible.type,
+          body: lastVisible.deletedAt ? null : lastVisible.body,
+          senderId: String(lastVisible.senderId),
+          createdAt: (lastVisible as unknown as { createdAt: Date }).createdAt,
         }
       : null,
     lastMessageAt: conv.lastMessageAt,
@@ -97,10 +109,42 @@ function assertGroupAdmin(conv: ConversationDocument, me: Types.ObjectId): void 
 
 export const conversationsService = {
   async list(me: Types.ObjectId, limit = 50) {
+    /* Over-fetch, then drop the ones this user deleted: the watermark lives in
+       a per-user map, which Mongo cannot compare against lastMessageAt in the
+       query itself. */
     const convs = await Conversation.find({ participantIds: me })
       .sort({ lastMessageAt: -1, _id: -1 })
-      .limit(limit);
-    return Promise.all(convs.map((c) => serialize(c._id, me)));
+      .limit(limit * 2);
+    const visible = convs.filter((c) => !isHiddenFrom(c, me)).slice(0, limit);
+    return Promise.all(visible.map((c) => serialize(c._id, me)));
+  },
+
+  /**
+   * Clear this user's copy of the history. The conversation stays in the list
+   * and the other participants keep every message.
+   */
+  async clearForMe(me: Types.ObjectId, conversationId: string) {
+    const conv = await loadMember(conversationId, me);
+    (conv.clearedAt as unknown as Map<string, Date>).set(String(me), new Date());
+    (conv.unread as unknown as Map<string, number>)?.set(String(me), 0);
+    await conv.save();
+    return serialize(conv._id, me);
+  },
+
+  /**
+   * Delete this user's copy of the conversation: clears the history and takes
+   * it out of their list. A later message brings it back carrying only what
+   * arrived after the deletion. Group membership is untouched — leaving a
+   * group is a separate, visible-to-others action.
+   */
+  async deleteForMe(me: Types.ObjectId, conversationId: string) {
+    const conv = await loadMember(conversationId, me);
+    const now = new Date();
+    (conv.clearedAt as unknown as Map<string, Date>).set(String(me), now);
+    (conv.hiddenAt as unknown as Map<string, Date>).set(String(me), now);
+    (conv.unread as unknown as Map<string, number>)?.set(String(me), 0);
+    await conv.save();
+    return { deleted: true };
   },
 
   async get(me: Types.ObjectId, conversationId: string) {
