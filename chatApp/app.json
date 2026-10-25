@@ -44,8 +44,8 @@
       "typedRoutes": true
     },
     "extra": {
-      "API_BASE_URL": "http://10.138.208.165:4000/api",
-      "SOCKET_URL": "http://10.138.208.165:4000"
+      "API_BASE_URL": "https://elowa.onrender.com/api",
+      "SOCKET_URL": "https://elowa.onrender.com"
     }
   }
 }

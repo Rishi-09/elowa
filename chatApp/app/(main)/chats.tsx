@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
@@ -17,6 +17,7 @@ import { socketClient } from '@/services/socket';
 import type { Conversation } from '@/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ElowaLogo } from '@/components/ui/ElowaLogo';
+import { AppDrawer } from '@/features/navigation/AppDrawer';
 
 function formatTime(iso?: string | null): string {
   if (!iso) return '';
@@ -52,6 +53,7 @@ export default function ChatsScreen() {
   const theme = useTheme();
   const router = useRouter();
   const qc = useQueryClient();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const { data, isLoading, isRefetching, isError, refetch } = useQuery({
     queryKey: ['conversations'],
@@ -136,10 +138,10 @@ export default function ChatsScreen() {
         <View style={styles.headerBar}>
           <IconButton
             name="menu"
-            accessibilityLabel="Open settings"
+            accessibilityLabel="Open menu"
             color="headerText"
             diameter={40}
-            onPress={() => router.push('/(main)/settings')}
+            onPress={() => setDrawerOpen(true)}
           />
           <ElowaLogo
             size={28}
@@ -199,6 +201,8 @@ export default function ChatsScreen() {
         onPress={() => router.push('/(main)/new-chat')}
         style={[styles.fab, theme.elevation[3]]}
       />
+
+      <AppDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </View>
   );
 }

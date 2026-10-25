@@ -120,6 +120,7 @@ const registry = {
 
   /* people & discovery */
   search: Search,
+  recent: Clock,
   newChat: SquarePen,
   newGroup: MessageSquarePlus,
   profile: User,

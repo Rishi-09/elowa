@@ -1,0 +1,22 @@
+[
+  {
+    "slug": "my-pack",
+    "name": "My Pack",
+    "order": 10,
+    "coverUrl": "https://example.com/stickers/my-pack/cover.webp",
+    "stickers": [
+      {
+        "url": "https://example.com/stickers/my-pack/01.webp",
+        "width": 512,
+        "height": 512,
+        "keywords": ["hello", "wave"]
+      },
+      {
+        "url": "https://example.com/stickers/my-pack/02.webp",
+        "width": 512,
+        "height": 512,
+        "keywords": ["thanks"]
+      }
+    ]
+  }
+]

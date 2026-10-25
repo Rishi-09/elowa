@@ -36,6 +36,31 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
           key TEXT PRIMARY KEY NOT NULL,
           value TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS sticker_favourites (
+          id TEXT PRIMARY KEY NOT NULL,
+          pack_id TEXT,
+          url TEXT NOT NULL,
+          width INTEGER NOT NULL,
+          height INTEGER NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS sticker_recents (
+          id TEXT PRIMARY KEY NOT NULL,
+          pack_id TEXT,
+          url TEXT NOT NULL,
+          width INTEGER NOT NULL,
+          height INTEGER NOT NULL,
+          used_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_sticker_recents_used
+          ON sticker_recents (used_at DESC);
+        CREATE TABLE IF NOT EXISTS sticker_custom (
+          id TEXT PRIMARY KEY NOT NULL,
+          url TEXT NOT NULL,
+          width INTEGER NOT NULL,
+          height INTEGER NOT NULL,
+          created_at TEXT NOT NULL
+        );
       `);
       return db;
     });
@@ -81,6 +106,27 @@ function fromRow(r: Record<string, unknown>): Message {
     deletedAt: (r['deleted_at'] as string | null) ?? null,
     expiresAt: (r['expires_at'] as string | null) ?? null,
     createdAt: String(r['created_at']),
+  };
+}
+
+/** A sticker as held on device, in favourites, recents or an imported pack. */
+export type StoredSticker = {
+  id: string;
+  packId?: string | null;
+  url: string;
+  width: number;
+  height: number;
+};
+
+const RECENT_STICKER_LIMIT = 30;
+
+function toStoredSticker(r: Record<string, unknown>): StoredSticker {
+  return {
+    id: String(r['id']),
+    packId: (r['pack_id'] as string | null) ?? null,
+    url: String(r['url']),
+    width: Number(r['width']),
+    height: Number(r['height']),
   };
 }
 
@@ -182,8 +228,101 @@ export const localCache = {
     }
   },
 
+  /* ---- Stickers -------------------------------------------------------
+     Favourites, recents and imported packs are device-local by design: they
+     need no round trip to feel instant and work offline. They are personal to
+     the signed-in account, so clearAll() drops them alongside messages. */
+
+  async listStickerFavourites(): Promise<StoredSticker[]> {
+    const db = await getDb();
+    const rows = await db.getAllAsync<Record<string, unknown>>(
+      'SELECT * FROM sticker_favourites ORDER BY created_at DESC',
+    );
+    return rows.map(toStoredSticker);
+  },
+
+  async isStickerFavourite(id: string): Promise<boolean> {
+    const db = await getDb();
+    const row = await db.getFirstAsync<{ id: string }>(
+      'SELECT id FROM sticker_favourites WHERE id = ?',
+      [id],
+    );
+    return !!row;
+  },
+
+  async addStickerFavourite(s: StoredSticker): Promise<void> {
+    const db = await getDb();
+    await db.runAsync(
+      `INSERT INTO sticker_favourites (id, pack_id, url, width, height, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO NOTHING`,
+      [s.id, s.packId ?? null, s.url, s.width, s.height, new Date().toISOString()],
+    );
+  },
+
+  async removeStickerFavourite(id: string): Promise<void> {
+    const db = await getDb();
+    await db.runAsync('DELETE FROM sticker_favourites WHERE id = ?', [id]);
+  },
+
+  async listStickerRecents(limit = RECENT_STICKER_LIMIT): Promise<StoredSticker[]> {
+    const db = await getDb();
+    const rows = await db.getAllAsync<Record<string, unknown>>(
+      'SELECT * FROM sticker_recents ORDER BY used_at DESC LIMIT ?',
+      [limit],
+    );
+    return rows.map(toStoredSticker);
+  },
+
+  /** Records a use and trims the tail so the grid stays one screenful. */
+  async recordStickerUse(s: StoredSticker): Promise<void> {
+    const db = await getDb();
+    await db.runAsync(
+      `INSERT INTO sticker_recents (id, pack_id, url, width, height, used_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET used_at = excluded.used_at`,
+      [s.id, s.packId ?? null, s.url, s.width, s.height, new Date().toISOString()],
+    );
+    await db.runAsync(
+      `DELETE FROM sticker_recents WHERE id NOT IN (
+         SELECT id FROM sticker_recents ORDER BY used_at DESC LIMIT ?
+       )`,
+      [RECENT_STICKER_LIMIT],
+    );
+  },
+
+  async listCustomStickers(): Promise<StoredSticker[]> {
+    const db = await getDb();
+    const rows = await db.getAllAsync<Record<string, unknown>>(
+      'SELECT * FROM sticker_custom ORDER BY created_at DESC',
+    );
+    return rows.map(toStoredSticker);
+  },
+
+  async addCustomSticker(s: StoredSticker): Promise<void> {
+    const db = await getDb();
+    await db.runAsync(
+      `INSERT INTO sticker_custom (id, url, width, height, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO NOTHING`,
+      [s.id, s.url, s.width, s.height, new Date().toISOString()],
+    );
+  },
+
+  async removeCustomSticker(id: string): Promise<void> {
+    const db = await getDb();
+    await db.runAsync('DELETE FROM sticker_custom WHERE id = ?', [id]);
+    await db.runAsync('DELETE FROM sticker_favourites WHERE id = ?', [id]);
+    await db.runAsync('DELETE FROM sticker_recents WHERE id = ?', [id]);
+  },
+
   async clearAll(): Promise<void> {
     const db = await getDb();
-    await db.execAsync('DELETE FROM messages');
+    await db.execAsync(
+      `DELETE FROM messages;
+       DELETE FROM sticker_favourites;
+       DELETE FROM sticker_recents;
+       DELETE FROM sticker_custom;`,
+    );
   },
 };

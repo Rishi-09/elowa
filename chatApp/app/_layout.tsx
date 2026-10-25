@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { Slot, SplashScreen, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@/theme/ThemeProvider';
@@ -66,13 +67,18 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
-          <ThemeProvider>
-            {/* Every screen's top inset sits on the navy header, in both themes. */}
-            <StatusBar style="light" />
-            <AuthGate />
-          </ThemeProvider>
-        </QueryClientProvider>
+        {/* Feeds keyboard geometry to the composer. Required because the app is
+            edge-to-edge, where adjustResize no longer shrinks the window and a
+            plain KeyboardAvoidingView leaves the toolbar under the keyboard. */}
+        <KeyboardProvider>
+          <QueryClientProvider client={queryClient}>
+            <ThemeProvider>
+              {/* Every screen's top inset sits on the navy header, in both themes. */}
+              <StatusBar style="light" />
+              <AuthGate />
+            </ThemeProvider>
+          </QueryClientProvider>
+        </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

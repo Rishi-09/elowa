@@ -42,3 +42,6 @@ Thumbs.db
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
+
+# Android release signing material (never commit)
+chatApp/credentials/

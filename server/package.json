@@ -8,7 +8,10 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "stickers:seed": "tsx src/scripts/seedStickers.ts",
+    "stickers:import": "tsx src/scripts/seedStickers.ts import",
+    "stickers:list": "tsx src/scripts/seedStickers.ts list"
   },
   "dependencies": {
     "argon2": "^0.40.3",

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Pressable, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -519,10 +520,10 @@ export default function ChatScreen() {
 
       <OfflineBanner />
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      {/* 'padding' on both platforms: under edge-to-edge Android no longer
+          resizes the window for the keyboard, so the composer has to be lifted
+          explicitly or it ends up behind the keyboard. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         {initialLoading && messages.length === 0 ? (
           <MessageSkeleton />
         ) : (
