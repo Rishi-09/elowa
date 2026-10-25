@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "Elowa",
+    "slug": "elowa",
+    "scheme": "elowa",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.elowa.app"
+    },
+    "android": {
+      "package": "com.elowa.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#1E2D3F"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Elowa needs access to your photos to send images.",
+          "cameraPermission": "Elowa needs camera access to capture photos and videos."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#1E2D3F"
+        }
+      ],
+      "expo-image",
+      "expo-splash-screen",
+      "expo-sqlite",
+      "expo-status-bar",
+      "expo-video"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "API_BASE_URL": "http://10.138.208.165:4000/api",
+      "SOCKET_URL": "http://10.138.208.165:4000"
+    }
+  }
+}
